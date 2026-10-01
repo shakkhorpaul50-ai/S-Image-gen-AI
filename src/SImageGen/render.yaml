@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: s-image-gen-ai
+    runtime: docker
+    plan: free
+    healthCheckPath: /healthz
+    envVars:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      - key: DATABASE_URL
+        sync: false
+      - key: POLLINATIONS_API_KEY
+        sync: false
+      - key: CLOUDINARY_URL
+        sync: false
+      - key: IMAGE_BACKEND
+        value: auto
+      - key: INFERENCE_URL
+        sync: false
+      - key: INFERENCE_KEY
+        sync: false
+      - key: IMAGE_MODEL
+        value: zimage
+      - key: IMAGE_EDIT_MODEL
+        value: gptimage
+      - key: IMAGE_SIZE
+        value: 512x512

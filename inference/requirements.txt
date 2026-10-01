@@ -1,0 +1,9 @@
+# torch: plain PyPI build (CUDA-capable; CPU works everywhere, incl. this Space).
+# gradio + spaces are provided by the HuggingFace platform — do NOT pin here.
+torch
+safetensors
+fastapi
+uvicorn
+pillow
+numpy
+huggingface_hub

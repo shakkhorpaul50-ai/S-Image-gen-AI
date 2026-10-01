@@ -1,0 +1,29 @@
+@model Guid
+@{
+    ViewData["Title"] = "Working...";
+}
+<h2>Working on your image…</h2>
+<p id="msg" class="text-muted">Queued — this page updates automatically.</p>
+<div class="spinner-border" role="status" id="spin"></div>
+@section Scripts {
+<script>
+    const id = '@Model';
+    const t = setInterval(async () => {
+        try {
+            const r = await fetch('@Url.Action("StatusJson", "Generate")?id=' + id);
+            const j = await r.json();
+            if (j.status === 'Done') {
+                clearInterval(t);
+                location.href = '@Url.Action("Result", "Generate")?id=' + id;
+            } else if (j.status === 'Failed') {
+                clearInterval(t);
+                document.getElementById('spin').style.display = 'none';
+                document.getElementById('msg').textContent = 'Failed: ' + (j.error || 'unknown error');
+                document.getElementById('msg').className = 'text-danger';
+            } else {
+                document.getElementById('msg').textContent = 'Status: ' + j.status + '…';
+            }
+        } catch (e) { /* retry next tick */ }
+    }, 2000);
+</script>
+}
