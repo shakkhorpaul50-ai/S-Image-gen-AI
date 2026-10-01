@@ -10,6 +10,8 @@ public class AppDbContext : DbContext
     public DbSet<User> Users => Set<User>();
     public DbSet<DailyUsage> DailyUsages => Set<DailyUsage>();
     public DbSet<Generation> Generations => Set<Generation>();
+    public DbSet<Conversation> Conversations => Set<Conversation>();
+    public DbSet<Message> Messages => Set<Message>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -21,6 +23,18 @@ public class AppDbContext : DbContext
             .HasOne<User>()
             .WithMany()
             .HasForeignKey(g => g.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+        b.Entity<Conversation>().HasIndex(c => new { c.UserId, c.CreatedAtUtc });
+        b.Entity<Conversation>()
+            .HasOne<User>()
+            .WithMany()
+            .HasForeignKey(c => c.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+        b.Entity<Message>().HasIndex(m => new { m.ConversationId, m.CreatedAtUtc });
+        b.Entity<Message>()
+            .HasOne<Conversation>()
+            .WithMany()
+            .HasForeignKey(m => m.ConversationId)
             .OnDelete(DeleteBehavior.Cascade);
     }
 }

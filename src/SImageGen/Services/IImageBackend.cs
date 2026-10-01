@@ -1,7 +1,8 @@
 namespace SImageGen.Services;
 
-/// <summary>Image generation backend. Implementations: CustomModelClient (own 0.15B
-/// model via the inference endpoint) and PollinationsClient (gateway fallback).</summary>
+/// <summary>Image generation backend. Implementations: LocalOnnxBackend (own 0.15B
+/// model in-process), CustomModelClient (remote inference endpoint) and
+/// PollinationsClient (gateway fallback).</summary>
 public interface IImageBackend
 {
     string DefaultModel { get; }

@@ -653,3 +653,169 @@ if HF_TOKEN and HF_REPO:
 else:
     print("to upload: set HF_TOKEN + HF_REPO env vars and re-run this cell,")
     print("or download /kaggle/working/bundle and upload manually to a Hub model repo.")
+
+# %% 15. Export ONNX quartet (fp32) + static INT8 (~90MB) + HF upload
+# Proven recipe (validated locally): legacy exporter, dynamo=False, opset 17.
+# Exports from fp32 dit_te.pt (NOT the Q3 file) for best numerics.
+# Self-contained: re-downloads microdiffusion_model.py, rebuilds from files.
+import subprocess as _sp2
+_sp2.run([sys.executable, "-m", "pip", "install", "-q", "onnx", "onnxruntime"], check=False)
+import importlib.util as _ilu
+import shutil as _sh
+import urllib.request as _url
+import numpy as _np
+import pandas as _pd
+import onnxruntime as _ort
+from onnxruntime.quantization import CalibrationDataReader, QuantFormat, QuantType, quantize_static
+
+_mraw = "https://raw.githubusercontent.com/shakkhorpaul50-ai/S-Image-gen-AI/main/training/microdiffusion_model.py"
+os.makedirs("/kaggle/working/onnx", exist_ok=True)
+_url.urlretrieve(_mraw, "/kaggle/working/onnx/_mdm.py")
+_sp = importlib.util.spec_from_file_location("_mdm", "/kaggle/working/onnx/_mdm.py")
+_mdm = importlib.util.module_from_spec(_sp)
+_sp.loader.exec_module(_mdm)
+
+ONNX_DIR = "/kaggle/working/onnx"
+_dev = "cuda" if torch.cuda.is_available() else "cpu"
+_calib_prov = (["CUDAExecutionProvider"] if torch.cuda.is_available() else ["CPUExecutionProvider"])
+
+_tj = json.load(open("/kaggle/working/tokenizer.json"))
+_cfg = _tj["cfg"]
+_dit, _te, _vae = _mdm.build_models(_cfg, len(_tj["vocab"]), device="cpu")
+_ckpt = torch.load("/kaggle/working/dit_te.pt", map_location="cpu", weights_only=False)
+_dit.load_state_dict(_ckpt["dit"]); _te.load_state_dict(_ckpt["te"])
+_vae.load_state_dict(torch.load("/kaggle/working/vae.pt", map_location="cpu", weights_only=False))
+_dit.eval(); _te.eval(); _vae.eval()
+
+class _DecOnly(torch.nn.Module):
+    def __init__(self, vae):
+        super().__init__()
+        self.dec_in = vae.dec_in
+        self.dec = vae.dec
+    def forward(self, z):
+        return self.dec(self.dec_in(z))
+
+class _EncOnly(torch.nn.Module):
+    def __init__(self, vae):
+        super().__init__()
+        self.enc = vae.enc
+        self.mu = vae.mu
+    def forward(self, x):
+        return self.mu(self.enc(x))
+
+def _export(mod, args, names_in, names_out, path):
+    with torch.no_grad():
+        ref = mod(*args)
+    torch.onnx.export(mod, args, path, input_names=names_in, output_names=names_out,
+                      opset_version=17, do_constant_folding=True, dynamo=False)
+    sess = _ort.InferenceSession(path, providers=["CPUExecutionProvider"])
+    out = sess.run(None, {k: (v.numpy() if torch.is_tensor(v) else v)
+                          for k, v in zip(names_in, args)})[0]
+    r = ref.numpy() if torch.is_tensor(ref) else ref
+    cos = float((r.flatten() * o.flatten()).sum() / (_np.linalg.norm(r.flatten()) * _np.linalg.norm(o.flatten()) + 1e-12)) if (o := out) is not None else 0.0
+    print(f"{os.path.basename(path)}: cosine vs torch = {cos:.6f} (want >0.999)")
+    return path
+
+_ids = torch.tensor([encode_text("a cat, ukiyo-e woodblock print")])
+_zt = torch.randn(1, 4, 32, 32)
+_xt = torch.randn(1, 3, 256, 256)
+_export(_te, (_ids,), ["ids"], ["txt"], f"{ONNX_DIR}/te150m_fp32.onnx")
+_export(_DecOnly(_vae), (_zt,), ["z"], ["img"], f"{ONNX_DIR}/vae150m_dec_fp32.onnx")
+_export(_EncOnly(_vae), (_xt,), ["x"], ["mu"], f"{ONNX_DIR}/vae150m_enc_fp32.onnx")
+with torch.no_grad():
+    _txt, _tm = _te(_ids)
+_export(_dit, (_zt, torch.tensor([0.5]), _txt, (_ids == 0)),
+        ["x", "t", "txt", "tmask"], ["v"], f"{ONNX_DIR}/dit150m_fp32.onnx")
+
+# calibration data: REAL cached latents + captions (reload session-safe)
+_lat = torch.load("/kaggle/working/latents.pt", weights_only=False)["lat"].float()
+_capcsvs = glob.glob("/kaggle/input/**/captions.txt", recursive=True)
+_caps = _pd.read_csv(_capcsvs[0])["caption"].astype(str).tolist() if _capcsvs else ["a cat"]
+_rng = random.Random(11)
+
+class _DiTCal(CalibrationDataReader):
+    def __init__(self, n=48):
+        self.n, self.i = n, 0
+    def get_next(self):
+        if self.i >= self.n:
+            return None
+        self.i += 1
+        r = _rng.randrange(len(_caps))
+        ids = torch.tensor([encode_text(_caps[r])])
+        with torch.no_grad():
+            txt, tm = _te(ids)
+        return {"x": _lat[_rng.randrange(len(_lat))].unsqueeze(0).numpy(),
+                "t": _np.array([random.random()], _np.float32),
+                "txt": txt.numpy(), "tmask": tm.numpy()}
+    def rewind(self):
+        self.i = 0
+
+class _TECal(CalibrationDataReader):
+    def __init__(self, n=24):
+        self.n, self.i = n, 0
+    def get_next(self):
+        if self.i >= self.n:
+            return None
+        self.i += 1
+        return {"ids": _np.array([encode_text(_caps[_rng.randrange(len(_caps))])], _np.int64)}
+    def rewind(self):
+        self.i = 0
+
+class _ZCal(CalibrationDataReader):
+    def __init__(self, n=24):
+        self.n, self.i = n, 0
+    def get_next(self):
+        if self.i >= self.n:
+            return None
+        self.i += 1
+        return {"z": _lat[_rng.randrange(len(_lat))].unsqueeze(0).numpy()}
+    def rewind(self):
+        self.i = 0
+
+class _XCal(CalibrationDataReader):
+    def __init__(self, n=16):
+        self.paths = None
+        self.n, self.i = n, 0
+    def get_next(self):
+        if self.paths is None:
+            cand = []
+            for ext in ("*.jpg", "*.jpeg", "*.png"):
+                cand += glob.glob(os.path.join("/kaggle/input", "**", ext), recursive=True)
+            self.paths = cand
+        if self.i >= self.n or not self.paths:
+            return None
+        self.i += 1
+        from PIL import Image as _PIL
+        im = _PIL.open(self.paths[_rng.randrange(len(self.paths))]).convert("RGB")
+        return {"x": tfm(im).unsqueeze(0).numpy()}
+    def rewind(self):
+        self.i = 0
+
+for _src, _cal in [("dit150m_fp32.onnx", _DiTCal()), ("te150m_fp32.onnx", _TECal()),
+                   ("vae150m_dec_fp32.onnx", _ZCal()), ("vae150m_enc_fp32.onnx", _XCal())]:
+    _dst = _src.replace("_fp32", "_s8")
+    quantize_static(f"{ONNX_DIR}/{_src}", f"{ONNX_DIR}/{_dst}", _cal,
+                    quant_format=QuantFormat.QDQ, weight_type=QuantType.QInt8,
+                    per_channel=True, calibration_providers=_calib_prov)
+    _sess = _ort.InferenceSession(f"{ONNX_DIR}/{_dst}", providers=["CPUExecutionProvider"])
+    print(f"{_dst}: {os.path.getsize(f'{ONNX_DIR}/{_dst}') / 1e6:.1f} MB, "
+          f"inputs={[i.name for i in _sess.get_inputs()]}")
+
+_tot = sum(os.path.getsize(os.path.join(ONNX_DIR, f)) for f in os.listdir(ONNX_DIR) if f.endswith("_s8.onnx"))
+print(f"INT8 quartet total: {_tot / 1e6:.1f} MB (budget: <150MB file, ~350-400MB runtime on Render free)")
+_sh.copy("/kaggle/working/tokenizer.json", f"{ONNX_DIR}/tokenizer.json")
+
+_hf_token = os.environ.get("HF_TOKEN", "")
+_hf_repo = os.environ.get("HF_REPO", "")
+if _hf_token and _hf_repo:
+    _sp2.run([sys.executable, "-m", "pip", "install", "-q", "huggingface_hub"], check=False)
+    from huggingface_hub import HfApi
+    _api = HfApi(token=_hf_token)
+    _api.create_repo(_hf_repo, exist_ok=True)
+    _api.upload_folder(folder_path=ONNX_DIR, repo_id=_hf_repo)
+    print(f"onnx uploaded -> https://huggingface.co/{_hf_repo}")
+    for _f in ["dit150m_s8.onnx", "te150m_s8.onnx", "vae150m_dec_s8.onnx", "vae150m_enc_s8.onnx", "tokenizer.json"]:
+        print(f"  https://huggingface.co/{_hf_repo}/resolve/main/{_f}")
+    print(f"Render/Docker env: ONNX_BASE_URL=https://huggingface.co/{_hf_repo}/resolve/main")
+else:
+    print("set HF_TOKEN + HF_REPO env vars and re-run for upload, or download /kaggle/working/onnx manually.")

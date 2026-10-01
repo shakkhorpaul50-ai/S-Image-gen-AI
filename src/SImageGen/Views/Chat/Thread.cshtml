@@ -1,0 +1,81 @@
+@model List<Message>
+@{
+    ViewData["Title"] = ViewBag.Title ?? "Chat";
+    var convos = (List<Conversation>)ViewBag.Convos;
+    var convoId = (Guid?)ViewBag.ConvoId;
+    var isNew = (bool)(ViewBag.IsNew ?? false);
+}
+<link rel="stylesheet" href="~/css/chat.css" />
+<div class="chat-wrap">
+    <aside class="chat-side">
+        <button id="newChatBtn" class="btn btn-outline-light btn-sm w-100 mb-2">+ New chat</button>
+        <div class="convo-list">
+            @foreach (var c in convos)
+            {
+                <div class="convo-item @(convoId == c.Id ? "active" : "")">
+                    <a asp-action="Thread" asp-route-id="@c.Id" class="convo-link">@c.Title</a>
+                    <form asp-action="Delete" asp-route-id="@c.Id" method="post" class="d-inline"
+                          onsubmit="return confirm('Delete this chat?');">
+                        <button class="btn btn-sm convo-del" title="Delete">×</button>
+                    </form>
+                </div>
+            }
+        </div>
+        <div class="quota-line">Used today: <strong>@ViewBag.Used / @ViewBag.Quota</strong></div>
+    </aside>
+    <section class="chat-main">
+        <div id="messages" data-convo="@convoId">
+            @if (isNew)
+            {
+                <div class="empty-hero">
+                    <h3>What will you create?</h3>
+                    <p class="text-muted">Describe an image — or attach a photo to restyle it.</p>
+                </div>
+            }
+            @foreach (var m in Model)
+            {
+                <div class="msg" data-id="@m.Id" data-at="@m.CreatedAtUtc.ToString("o")" data-status="@m.Status" data-role="@m.Role">
+                    @if (m.Role == "user")
+                    {
+                        <div class="bubble user">@m.TextContent</div>
+                    }
+                    else
+                    {
+                        <div class="bubble assistant">
+                            @if (!string.IsNullOrEmpty(m.ImageUrl))
+                            {
+                                <img src="@m.ImageUrl" alt="@m.TextContent" loading="lazy" />
+                                <div class="cap">
+                                    <span>@m.TextContent</span>
+                                    <a href="@m.ImageUrl" target="_blank" download>Download</a>
+                                </div>
+                            }
+                            else if (m.Status == "Running")
+                            {
+                                <div class="spinner-border spinner-border-sm"></div>
+                                <span class="ms-2 text-muted">Working on your image…</span>
+                            }
+                            else
+                            {
+                                <div class="text-danger">Failed: @(m.Error ?? "unknown error")</div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+        <form id="composer" asp-action="Send" method="post" enctype="multipart/form-data">
+            <input type="hidden" name="conversationId" id="convoField" value="@convoId" />
+            <label class="attach" title="Attach photo (img2img)">📎
+                <input type="file" name="image" accept="image/*" hidden id="attachField" />
+            </label>
+            <span id="attachName" class="attach-name"></span>
+            <textarea name="prompt" id="promptField" rows="1" maxlength="500"
+                      placeholder="Describe an image…" required></textarea>
+            <button class="btn btn-primary" type="submit" id="sendBtn">Send</button>
+        </form>
+    </section>
+</div>
+@section Scripts {
+<script src="~/js/chat.js"></script>
+}

@@ -5,7 +5,7 @@ using System.Text.Json;
 namespace SImageGen.Services;
 
 /// <summary>Image backend via the Pollinations gateway (their GPUs = seconds per image).
-/// Kept as fallback: set IMAGE_BACKEND=pollinations to use it instead of the custom model.</summary>
+/// Fallback when the local model is unreachable; selectable via IMAGE_BACKEND=pollinations.</summary>
 public class PollinationsClient : IImageBackend
 {
     private readonly HttpClient _http;

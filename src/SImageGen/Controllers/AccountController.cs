@@ -35,7 +35,7 @@ public class AccountController : Controller
         _db.Users.Add(user);
         await _db.SaveChangesAsync();
         await SignInAsync(user);
-        return RedirectToAction("Index", "Generate");
+        return RedirectToAction("Index", "Chat");
     }
 
     [HttpPost, ValidateAntiForgeryToken]
@@ -51,7 +51,7 @@ public class AccountController : Controller
         }
         await SignInAsync(user);
         if (!string.IsNullOrEmpty(vm.ReturnUrl) && Url.IsLocalUrl(vm.ReturnUrl)) return Redirect(vm.ReturnUrl);
-        return RedirectToAction("Index", "Generate");
+        return RedirectToAction("Index", "Chat");
     }
 
     [HttpPost, ValidateAntiForgeryToken]

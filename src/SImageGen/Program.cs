@@ -71,6 +71,7 @@ else
 
 builder.Services.AddHttpClient<PollinationsClient>(c => c.Timeout = TimeSpan.FromMinutes(10));
 builder.Services.AddHttpClient<CustomModelClient>(c => c.Timeout = TimeSpan.FromMinutes(20));
+builder.Services.AddSingleton<LocalOnnxBackend>();
 builder.Services.AddSingleton<BackendSelector>();
 builder.Services.AddScoped<QuotaService>();
 builder.Services.AddSingleton<ImageStore>();
@@ -145,10 +146,32 @@ using (var scope = app.Services.CreateScope())
                 "Status" character varying(16) NOT NULL,
                 "Error" text,
                 "CreatedAtUtc" timestamp with time zone NOT NULL,
+                "ConversationId" uuid,
                 CONSTRAINT "PK_Generations" PRIMARY KEY ("Id"),
                 CONSTRAINT "FK_Generations_Users_UserId" FOREIGN KEY ("UserId") REFERENCES "Users" ("Id") ON DELETE CASCADE);
             CREATE INDEX IF NOT EXISTS "IX_Generations_PromptHash" ON "Generations" ("PromptHash");
             CREATE INDEX IF NOT EXISTS "IX_Generations_UserId_CreatedAtUtc" ON "Generations" ("UserId", "CreatedAtUtc");
+            CREATE TABLE IF NOT EXISTS "Conversations" (
+                "Id" uuid NOT NULL,
+                "UserId" integer NOT NULL,
+                "Title" character varying(120) NOT NULL,
+                "CreatedAtUtc" timestamp with time zone NOT NULL,
+                CONSTRAINT "PK_Conversations" PRIMARY KEY ("Id"),
+                CONSTRAINT "FK_Conversations_Users_UserId" FOREIGN KEY ("UserId") REFERENCES "Users" ("Id") ON DELETE CASCADE);
+            CREATE TABLE IF NOT EXISTS "Messages" (
+                "Id" uuid NOT NULL,
+                "ConversationId" uuid NOT NULL,
+                "Role" character varying(16) NOT NULL,
+                "TextContent" text,
+                "ImageUrl" text,
+                "GenerationId" uuid,
+                "Status" character varying(16) NOT NULL,
+                "Error" text,
+                "CreatedAtUtc" timestamp with time zone NOT NULL,
+                CONSTRAINT "PK_Messages" PRIMARY KEY ("Id"),
+                CONSTRAINT "FK_Messages_Conversations_ConversationId" FOREIGN KEY ("ConversationId") REFERENCES "Conversations" ("Id") ON DELETE CASCADE);
+            CREATE INDEX IF NOT EXISTS "IX_Messages_ConversationId_CreatedAtUtc" ON "Messages" ("ConversationId", "CreatedAtUtc");
+            CREATE INDEX IF NOT EXISTS "IX_Conversations_UserId_CreatedAtUtc" ON "Conversations" ("UserId", "CreatedAtUtc");
             """);
         app.Logger.LogInformation("Tables ensured");
     }

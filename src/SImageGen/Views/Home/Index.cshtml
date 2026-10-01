@@ -4,10 +4,10 @@
 <div class="p-5 mb-4 bg-light rounded-3">
     <div class="container-fluid py-4">
         <h1 class="display-5 fw-bold">S-Image-gen-AI</h1>
-        <p class="col-md-8 fs-5">Type a prompt, get a 256px image. Image-to-image restyling supported. Free: 50 generations per user per day. Powered by our custom 0.15B diffusion model.</p>
+        <p class="col-md-8 fs-5">Chat with our custom 0.15B diffusion model. Describe an image — or attach a photo to restyle it. Free: 50 generations per user per day.</p>
         @if (User.Identity?.IsAuthenticated == true)
         {
-            <a class="btn btn-primary btn-lg" asp-controller="Generate" asp-action="Index">Generate now</a>
+            <a class="btn btn-primary btn-lg" asp-controller="Chat" asp-action="Index">Open chat</a>
         }
         else
         {
@@ -18,6 +18,6 @@
 </div>
 <div class="row">
     <div class="col-md-4"><h4>Tiny &amp; free</h4><p>Our own 0.15B model (~45MB weights, &lt;220MB runtime) — no GPU bills.</p></div>
-    <div class="col-md-4"><h4>Text &amp; image input</h4><p>Generate from a prompt, or upload a photo and restyle it with a prompt.</p></div>
+    <div class="col-md-4"><h4>Continuous threads</h4><p>Every prompt continues the conversation; history, seeds and styles stay with the thread.</p></div>
     <div class="col-md-4"><h4>Fair use</h4><p>50 generations per user per day, tracked in Postgres, resetting at UTC midnight.</p></div>
 </div>

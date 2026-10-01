@@ -3,8 +3,8 @@ using System.Text.Json;
 
 namespace SImageGen.Services;
 
-/// <summary>Calls the self-hosted MicroDiffusion 0.15B inference endpoint
-/// (see inference/). Our model is fixed 256px; w/h are accepted and ignored.</summary>
+/// <summary>Calls a self-hosted MicroDiffusion inference endpoint
+/// (see inference/). Used only in IMAGE_BACKEND=space mode.</summary>
 public class CustomModelClient : IImageBackend
 {
     private readonly HttpClient _http;

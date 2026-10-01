@@ -1,9 +1,0 @@
-@model QuotaVm
-@{
-    ViewData["Title"] = "Daily limit reached";
-}
-<div class="alert alert-warning mt-3">
-    <h4>Daily limit reached</h4>
-    <p>You have used <strong>@Model.Used / @Model.Quota</strong> free generations today. Quota resets at UTC midnight.</p>
-</div>
-<a asp-controller="Gallery" asp-action="Index" class="btn btn-secondary">View my gallery</a>

@@ -19,6 +19,10 @@ services:
         sync: false
       - key: INFERENCE_KEY
         sync: false
+      - key: ONNX_BASE_URL
+        sync: false
+      - key: LOCAL_TIMEOUT_SECONDS
+        value: "360"
       - key: IMAGE_MODEL
         value: zimage
       - key: IMAGE_EDIT_MODEL

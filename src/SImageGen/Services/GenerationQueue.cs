@@ -34,6 +34,9 @@ public class GenerationQueue : BackgroundService
         }
     }
 
+    private static int LocalTimeoutSeconds =>
+        int.TryParse(Environment.GetEnvironmentVariable("LOCAL_TIMEOUT_SECONDS"), out var s) && s > 0 ? s : 360;
+
     private async Task ProcessAsync(Guid id, CancellationToken ct)
     {
         using var scope = _scopes.CreateScope();
@@ -49,20 +52,26 @@ public class GenerationQueue : BackgroundService
 
         try
         {
+            // Local CPU inference can take minutes: bound it, then fail over for speed.
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            if (primary is LocalOnnxBackend)
+                cts.CancelAfter(TimeSpan.FromSeconds(LocalTimeoutSeconds));
+            var tok = cts.Token;
+
             var (w, h) = IImageBackend.ParseSize(g.Size);
             byte[]? src = g.Mode == "i2i"
-                ? await primary.DownloadAsync(g.InputImageUrl!, ct)
+                ? await primary.DownloadAsync(g.InputImageUrl!, tok)
                 : null;
             byte[] bytes;
             try
             {
                 bytes = g.Mode == "i2i"
-                    ? await primary.EditAsync(src!, "input.png", g.Prompt, g.Model, g.Size, ct)
-                    : await primary.GenerateAsync(g.Prompt, g.Model, w, h, g.Seed, ct);
+                    ? await primary.EditAsync(src!, "input.png", g.Prompt, g.Model, g.Size, tok)
+                    : await primary.GenerateAsync(g.Prompt, g.Model, w, h, g.Seed, tok);
             }
             catch (Exception ex) when (selector.Fallback is not null && BackendSelector.IsTransientFailure(ex))
             {
-                // Silent auto-failover: custom host unreachable -> gateway.
+                // Silent auto-failover: local too slow or unreachable -> gateway.
                 // The row records the model that actually served it.
                 _log.LogWarning(ex, "Primary backend failed for {Id}; failing over to gateway", id);
                 var fb = selector.Fallback;
@@ -73,11 +82,25 @@ public class GenerationQueue : BackgroundService
             }
             g.ImageUrl = await store.UploadPngAsync(bytes, g.PromptHash, ct);
             g.Status = "Done";
+            var msg = await db.Messages.FirstOrDefaultAsync(
+                m => m.GenerationId == id && m.Role == "assistant", ct);
+            if (msg is not null)
+            {
+                msg.ImageUrl = g.ImageUrl;
+                msg.Status = "Done";
+            }
         }
         catch (Exception ex)
         {
             g.Status = "Failed";
             g.Error = ex.Message.Length > 500 ? ex.Message[..500] : ex.Message;
+            var msg = await db.Messages.FirstOrDefaultAsync(
+                m => m.GenerationId == id && m.Role == "assistant", ct);
+            if (msg is not null)
+            {
+                msg.Status = "Failed";
+                msg.Error = g.Error;
+            }
         }
         await db.SaveChangesAsync(ct);
     }

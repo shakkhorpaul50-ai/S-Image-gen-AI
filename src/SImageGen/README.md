@@ -9,10 +9,11 @@ storage. 50 free generations per user per day.
 
 - `training/` — from-scratch Kaggle pipeline (Flickr30k + WikiArt-30k, ~3h on T4):
   `kaggle_train_150m.py`/`.ipynb`, canonical `microdiffusion_model.py`
-  (arch + Q3 quant/dequant + `Q3Streamer` + samplers), packaging Cell 14.
-- `inference/` — HuggingFace Space code (FastAPI `/generate` + `/edit` + `/healthz`,
-  Gradio demo at `/ui`, `@spaces.GPU` with CPU fallback, `STREAMING=1` default).
-- `src/SImageGen/` — the web app (controllers, services, views, Dockerfile, `render.yaml`).
+  (arch + Q3 quant/dequant + `Q3Streamer` + samplers), packaging Cell 14,
+  export Cell 15 (ONNX quartet + static INT8 + Hub upload).
+- `inference/` — HuggingFace Space code (FastAPI + Gradio, `@spaces.GPU`),
+  usable as the `space` backend alternative.
+- `src/SImageGen/` — the web app (chat UI, backends, Dockerfile, `render.yaml`).
 
 ## How it works
 
@@ -22,9 +23,7 @@ storage. 50 free generations per user per day.
   with silent failover to the Pollinations gateway on timeout/failure
   (`LOCAL_TIMEOUT_SECONDS`, default 360). `local` = ONNX only,
   `space` = remote custom endpoint, `pollinations` = gateway only.
-- **Runtime weights <220MB**: the `Q3Streamer` path (packed Q3 + per-layer fp32)
-  is used by the `inference/` host; the Render web app runs the INT8 ONNX trio
-  (~90MB) in-process via ONNX Runtime.
+- Prompt-hash cache serves repeats instantly without consuming quota.
 
 ## Free-tier setup (Render + Neon + Cloudinary + Pollinations)
 
@@ -32,7 +31,7 @@ storage. 50 free generations per user per day.
 2. **Cloudinary** (https://cloudinary.com, free 25 GB): Dashboard → copy `CLOUDINARY_URL` (`cloudinary://key:secret@cloud`).
 3. **Pollinations** (https://enter.pollinations.ai/keys): free API key → `POLLINATIONS_API_KEY` (fallback backend).
 4. **ONNX weights**: run training Cell 15 with `HF_TOKEN`+`HF_REPO` → set `ONNX_BASE_URL=https://huggingface.co/<you>/<repo>/resolve/main` (serves `dit150m_s8.onnx`, `te150m_s8.onnx`, `vae150m_enc_s8.onnx`, `vae150m_dec_s8.onnx`). Downloaded once into the container on first generation.
-5. **Render** (https://render.com): New → Web Service (manual, Docker, free) → select this repo → set env vars → Deploy. Free plan sleeps after 15 min idle; first request wakes it (~30–60 s). `/healthz` reports backend mode + build SHA.
+5. **Render** (https://render.com): New → Web Service (manual, Docker, free, root dir `src/SImageGen`) → set env vars → Deploy. Free plan sleeps after 15 min idle; first request wakes it (~30–60 s). `/healthz` reports backend mode + build SHA.
 
 ## Speed notes (honest)
 

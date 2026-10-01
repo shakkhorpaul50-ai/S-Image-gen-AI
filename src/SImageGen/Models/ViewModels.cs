@@ -28,20 +28,6 @@ public class LoginVm
     public string? ReturnUrl { get; set; }
 }
 
-public class GenerateVm
-{
-    [Required(ErrorMessage = "Describe the image you want.")]
-    [StringLength(500, MinimumLength = 3)]
-    public string Prompt { get; set; } = "";
-
-    public string Mode { get; set; } = "t2i";
-
-    public IFormFile? Image { get; set; }
-
-    [Range(0, int.MaxValue)]
-    public int? Seed { get; set; }
-}
-
 public class QuotaVm
 {
     public int Used { get; set; }

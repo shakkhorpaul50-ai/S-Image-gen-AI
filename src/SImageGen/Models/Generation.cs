@@ -6,6 +6,7 @@ public class Generation
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public int UserId { get; set; }
+    public Guid? ConversationId { get; set; }
 
     /// <summary>"t2i" or "i2i".</summary>
     [MaxLength(8)]
