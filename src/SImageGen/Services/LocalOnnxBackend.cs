@@ -33,8 +33,7 @@ public class LocalOnnxBackend : IImageBackend
     public string DefaultSize => "256x256";
 
     private static string BaseUrl => (Environment.GetEnvironmentVariable("ONNX_BASE_URL")
-        ?? throw new InvalidOperationException(
-            "ONNX_BASE_URL is not set. Point it at the folder holding dit150m_s8.onnx, te150m_s8.onnx, vae150m_enc_s8.onnx, vae150m_dec_s8.onnx and tokenizer.json (e.g. a HuggingFace resolve URL)."))
+        ?? "https://github.com/shakkhorpaul50-ai/S-Image-gen-AI/releases/download/model-150m-v1")
         .TrimEnd('/');
 
     private static string CacheDir =>

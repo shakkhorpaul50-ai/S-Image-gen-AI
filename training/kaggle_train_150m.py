@@ -711,7 +711,8 @@ def _export(mod, args, names_in, names_out, path):
     sess = _ort.InferenceSession(path, providers=["CPUExecutionProvider"])
     out = sess.run(None, {k: (v.numpy() if torch.is_tensor(v) else v)
                           for k, v in zip(names_in, args)})[0]
-    r = ref.numpy() if torch.is_tensor(ref) else ref
+    r = ref[0] if isinstance(ref, tuple) else ref
+    r = r.numpy() if torch.is_tensor(r) else r
     cos = float((r.flatten() * o.flatten()).sum() / (_np.linalg.norm(r.flatten()) * _np.linalg.norm(o.flatten()) + 1e-12)) if (o := out) is not None else 0.0
     print(f"{os.path.basename(path)}: cosine vs torch = {cos:.6f} (want >0.999)")
     return path

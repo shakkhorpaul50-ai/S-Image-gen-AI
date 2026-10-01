@@ -30,7 +30,9 @@ storage. 50 free generations per user per day.
 1. **Neon** (https://neon.tech): create project → copy the connection string → set as `DATABASE_URL`. Tables auto-migrate on app startup (fail-open if Neon naps).
 2. **Cloudinary** (https://cloudinary.com, free 25 GB): Dashboard → copy `CLOUDINARY_URL` (`cloudinary://key:secret@cloud`).
 3. **Pollinations** (https://enter.pollinations.ai/keys): free API key → `POLLINATIONS_API_KEY` (fallback backend).
-4. **ONNX weights**: run training Cell 15 with `HF_TOKEN`+`HF_REPO` → set `ONNX_BASE_URL=https://huggingface.co/<you>/<repo>/resolve/main` (serves `dit150m_s8.onnx`, `te150m_s8.onnx`, `vae150m_enc_s8.onnx`, `vae150m_dec_s8.onnx`). Downloaded once into the container on first generation.
+4. **ONNX weights**: already released at `model-150m-v1` on this repo's Releases page
+   (INT8 quartet ~88MB + tokenizer). The app downloads them by default; override with
+   `ONNX_BASE_URL` to use another source. Downloaded once into the container on first generation.
 5. **Render** (https://render.com): New → Web Service (manual, Docker, free, root dir `src/SImageGen`) → set env vars → Deploy. Free plan sleeps after 15 min idle; first request wakes it (~30–60 s). `/healthz` reports backend mode + build SHA.
 
 ## Speed notes (honest)
